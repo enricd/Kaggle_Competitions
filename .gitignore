@@ -1,0 +1,11 @@
+venv
+.ipynb_checkpoints
+__pycache__/
+data
+*.csv
+*.jpg
+*.png
+.vscode
+lightning_logs
+*tar.gz
+*.ckpt
