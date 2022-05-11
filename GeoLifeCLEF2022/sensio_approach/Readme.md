@@ -1,0 +1,1 @@
+The code in the folder "sensio_approach" is mostly extracted following its video series about the competition from his youtube channel https://www.youtube.com/watch?v=iXvO9fCOAIg&t=4220s&ab_channel=sensio for learning purposes and trying to build on that something better if possible.

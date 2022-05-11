@@ -1,0 +1,9 @@
+trainer:
+  gpus: 1
+  limit_train_batches: 200
+  max_epochs: 50
+  enable_checkpointing: True
+  logger: True
+
+datamodule:
+  num_workers: 4

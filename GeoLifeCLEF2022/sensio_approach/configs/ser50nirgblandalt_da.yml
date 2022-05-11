@@ -1,0 +1,22 @@
+backbone: "seresnet50"
+
+trainer:
+  gpus: 1
+  limit_train_batches: 1000
+  enable_checkpointing: True
+  logger: True
+  resume_from_checkpoint: "checkpoints/configs/ser50nirgblandalt_da-val_loss=6.67674-epoch=25.ckpt"
+
+early_stopping: False
+
+datamodule:
+  batch_size: 210
+  num_workers: 6
+  train_trans:
+    HorizontalFlip:
+      p: 0.5
+    VerticalFlip:
+      p: 0.5
+    Rotate:
+      limit: 20
+      p: 0.5

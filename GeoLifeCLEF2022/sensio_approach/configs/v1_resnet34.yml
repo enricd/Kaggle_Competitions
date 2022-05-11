@@ -1,0 +1,13 @@
+backbone: "resnet34"
+
+trainer:
+  gpus: 1
+  limit_train_batches: 200
+  max_epochs: 50
+  enable_checkpointing: True
+  logger: True
+  resume_from_checkpoint: "checkpoints/v1_resnet34-val_loss=6.80288-epoch=18.ckpt"
+
+datamodule:
+  batch_size: 320
+  num_workers: 6

@@ -9,3 +9,5 @@ data
 lightning_logs
 *tar.gz
 *.ckpt
+GLC
+wandb/

@@ -1,0 +1,9 @@
+backbone: "resnet18"
+
+trainer:
+  gpus: 1
+  enable_checkpointing: True
+  logger: True
+  #resume_from_checkpoint: checkpoints/r18rgbnir-val_loss=6.48245-epoch=3.ckpt
+
+early_stopping: True

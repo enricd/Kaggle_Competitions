@@ -1,0 +1,22 @@
+backbone: "seresnext50_32x4d"
+
+trainer:
+  gpus: 1
+  limit_train_batches: 1000
+  enable_checkpointing: True
+  logger: True
+  #resume_from_checkpoint: "checkpoints/sernxt50rgbnir_da-val_loss=6.97472-epoch=1.ckpt"
+
+early_stopping: False
+
+datamodule:
+  batch_size: 195
+  num_workers: 8
+  train_trans:
+    HorizontalFlip:
+      p: 0.5
+    VerticalFlip:
+      p: 0.5
+    Rotate:
+      limit: 20
+      p: 0.5
