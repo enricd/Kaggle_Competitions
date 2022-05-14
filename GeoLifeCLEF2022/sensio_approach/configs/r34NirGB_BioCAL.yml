@@ -1,0 +1,32 @@
+backbone: "resnet34"
+
+trainer:
+  gpus: 1
+  #limit_train_batches: 500
+  val_check_interval: 0.25
+  enable_checkpointing: True
+  logger: True
+  max_epochs: 30
+  resume_from_checkpoint: "checkpoints/configs/r34NirGB_BioCAL-val_loss=6.35113-epoch=1.ckpt"
+
+early_stopping: False
+
+optimizer_params: 
+  lr: 0.0003
+
+datamodule:
+  batch_size: 750
+  num_workers: 6
+  train_trans:
+    HorizontalFlip:
+      p: 0.5
+    VerticalFlip:
+      p: 0.5
+    Rotate:
+      limit: 20
+      p: 0.8
+    RandomBrightnessContrast:
+      brightness_limit: 0.1
+      contrast_limit: 0.1
+      p: 0.8
+

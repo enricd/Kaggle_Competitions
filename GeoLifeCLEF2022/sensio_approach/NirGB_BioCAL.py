@@ -1,4 +1,4 @@
-from src import RGBNirBioModule, RGBNirBioDataModule
+from src import NirGB_BioCAL_Module, NirGB_BioCAL_DataModule
 import pytorch_lightning as pl
 import sys
 import yaml
@@ -7,12 +7,12 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 
 config = {
-    "backbone": "resnet18",
+    "backbone": "resnet34",
     "pretrained": True,
     "optimizer": "Adam",
-    "num_bio": 27,
-    "bio_layers": [256, 512],
-    "bio_dropout": 0.,
+    "num_bio": 67,
+    "bio_layers": [256, 512, 1024],
+    "bio_dropout": 0.2,
     "optimizer_params": {
         "lr": 1e-3
     },
@@ -36,8 +36,8 @@ config = {
 
 def train(config, name):
     pl.seed_everything(42, workers=True)
-    dm = RGBNirBioDataModule(**config["datamodule"])
-    module = RGBNirBioModule(config)
+    dm =  NirGB_BioCAL_DataModule(**config["datamodule"])
+    module =  NirGB_BioCAL_Module(config)
     if config["trainer"]["logger"]:
         config["trainer"]["logger"] = WandbLogger(
             project="GeoLifeCLEF2022",

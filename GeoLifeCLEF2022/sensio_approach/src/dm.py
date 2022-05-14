@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import pandas as pd
 from .utils import get_patch_rgb
-from .ds import RGBDataset, RGBNirDataset, NirGBDataset, RGNirDataset, NirGBLandDataset, NirGBAltDataset, NirGBLandAltDataset, RGBNirBioDataset#, RGBNirBioCountryDataset
+from .ds import RGBDataset, RGBNirDataset, NirGBDataset, RGNirDataset, NirGBLandDataset, NirGBAltDataset, NirGBLandAltDataset, RGBNirBioDataset, NirGBAltBioDataset, NirGB_BioCAL_Dataset
 from torch.utils.data import DataLoader
 import albumentations as A
 from sklearn.impute import SimpleImputer
@@ -12,13 +12,14 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 class RGBDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size=32, path = "../data", num_workers=0, pin_memory=False, train_trans=None):
+    def __init__(self, batch_size=32, path = "../data", num_workers=0, pin_memory=False, train_trans=None, test_trans=None):
         super().__init__()
         self.batch_size = batch_size
         self.path = Path(path)
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.train_trans = train_trans
+        self.test_trans = test_trans
         
     def read_data(self, mode="train"):
         obs_fr = pd.read_csv(self.path / "observations" / f"observations_fr_{mode}.csv", sep=";")
@@ -180,12 +181,12 @@ class RGBNirDataModule(RGNirDataModule):
         
         
 class RGBNirBioDataModule(RGBDataModule):
-    def __init__(self, batch_size=32, path='data', num_workers=0, pin_memory=False, train_trans=None):
+    def __init__(self, batch_size=32, path="../data", num_workers=0, pin_memory=False, train_trans=None):
         super().__init__(batch_size, path, num_workers, pin_memory, train_trans)
 
     def setup(self, stage=None):
         self.data = self.read_data()
-        self.data_test = self.read_data('test')
+        self.data_test = self.read_data("test")
         self.split_data()
         # read bioclimatic data
         df_env = pd.read_csv(self.path / "pre-extracted" / "environmental_vectors.csv", sep=";", index_col="observation_id")
@@ -195,8 +196,8 @@ class RGBNirBioDataModule(RGBDataModule):
         X_test = df_env.loc[self.data_test.observation_id.values]
         # inputer and normalizer
         pipeline = Pipeline([
-            ('imputer', SimpleImputer(strategy="median")),
-            ('std_scaler', StandardScaler()),
+            ("imputer", SimpleImputer(strategy="median")),
+            ("std_scaler", StandardScaler()),
         ])
         self.X_train = pipeline.fit_transform(X_train.values)
         self.X_val = pipeline.transform(X_val.values)
@@ -214,3 +215,107 @@ class RGBNirBioDataModule(RGBDataModule):
         self.ds_val = RGBNirBioDataset(
             self.data_val.observation_id.values, self.X_val, self.data_val.species_id.values)
         self.ds_test = RGBNirBioDataset(self.data_test.observation_id.values, self.X_test)     
+        
+
+class NirGBAltBioDataModule(RGBDataModule):
+    def __init__(self, batch_size=32, path="../data", num_workers=0, pin_memory=False, train_trans=None, test_trans=None):
+        super().__init__(batch_size, path, num_workers, pin_memory, train_trans, test_trans)
+
+    def setup(self, stage=None):
+        self.data = self.read_data()
+        self.data_test = self.read_data("test")
+        self.split_data()
+        # read bioclimatic data
+        df_env = pd.read_csv(self.path / "pre-extracted" / "environmental_vectors.csv", sep=";", index_col="observation_id")
+        # get train, val, test bioclimatic data
+        X_train = df_env.loc[self.data_train.observation_id.values]
+        X_val = df_env.loc[self.data_val.observation_id.values]
+        X_test = df_env.loc[self.data_test.observation_id.values]
+        # inputer and normalizer
+        pipeline = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("std_scaler", StandardScaler()),
+        ])
+        self.X_train = pipeline.fit_transform(X_train.values)
+        self.X_val = pipeline.transform(X_val.values)
+        self.X_test = pipeline.transform(X_test.values)
+        self.generate_datasets()
+        self.print_dataset_info()
+
+    def generate_datasets(self):
+        self.ds_train = NirGBAltBioDataset(
+            self.data_train.observation_id.values, 
+            self.X_train, 
+            self.data_train.latitude.values, self.data_train.longitude.values, 
+            self.data_train.species_id.values, 
+            trans=A.Compose([
+                getattr(A, trans)(**params) for trans, params in self.train_trans.items()
+                ]) 
+                if self.train_trans is not None else None
+            )
+        self.ds_val = NirGBAltBioDataset(
+            self.data_val.observation_id.values,
+            self.X_val,
+            self.data_val.latitude.values, self.data_val.longitude.values, 
+            self.data_val.species_id.values
+            )
+        self.ds_test = NirGBAltBioDataset(
+            self.data_test.observation_id.values, 
+            self.X_test,
+            self.data_test.latitude.values, self.data_test.longitude.values,
+            trans = A.Compose([
+                getattr(A, trans)(**params) for trans, params in self.test_trans.items()
+            ]) if self.test_trans is not None else None
+            )  
+        
+
+class NirGB_BioCAL_DataModule(RGBDataModule):
+    def __init__(self, batch_size=32, path="../data", num_workers=0, pin_memory=False, train_trans=None, test_trans=None):
+        super().__init__(batch_size, path, num_workers, pin_memory, train_trans, test_trans)
+
+    def setup(self, stage=None):
+        self.data = self.read_data()
+        self.data_test = self.read_data("test")
+        self.split_data()
+        # read bioclimatic data
+        df_env = pd.read_csv(self.path / "pre-extracted" / "environmental_vectors.csv", sep=";", index_col="observation_id")
+        # get train, val, test bioclimatic data
+        X_train = df_env.loc[self.data_train.observation_id.values]
+        X_val = df_env.loc[self.data_val.observation_id.values]
+        X_test = df_env.loc[self.data_test.observation_id.values]
+        # inputer and normalizer
+        pipeline = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("std_scaler", StandardScaler()),
+        ])
+        self.X_train = pipeline.fit_transform(X_train.values)
+        self.X_val = pipeline.transform(X_val.values)
+        self.X_test = pipeline.transform(X_test.values)
+        self.generate_datasets()
+        self.print_dataset_info()
+
+    def generate_datasets(self):
+        self.ds_train = NirGB_BioCAL_Dataset(
+            self.data_train.observation_id.values,  # observation_ids
+            self.X_train,                           # bio
+            self.data_train.latitude.values, self.data_train.longitude.values,  # lat, lon
+            self.data_train.species_id.values,      # labels
+            trans=A.Compose([
+                getattr(A, trans)(**params) for trans, params in self.train_trans.items()
+                ]) 
+                if self.train_trans is not None else None
+            )
+        self.ds_val = NirGB_BioCAL_Dataset(
+            self.data_val.observation_id.values,
+            self.X_val,
+            self.data_val.latitude.values, self.data_val.longitude.values, 
+            self.data_val.species_id.values
+            )
+        self.ds_test = NirGB_BioCAL_Dataset(
+            self.data_test.observation_id.values, 
+            self.X_test,
+            self.data_test.latitude.values, self.data_test.longitude.values,
+            trans = A.Compose([
+                getattr(A, trans)(**params) for trans, params in self.test_trans.items()
+            ]) if self.test_trans is not None else None
+            ) 
