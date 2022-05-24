@@ -1,18 +1,19 @@
-
+import numpy as np
 import pytorch_lightning as pl
 import os
 from pathlib import Path
 import pandas as pd
 from .utils import get_patch_rgb
-from .ds import RGBDataset, RGBNirDataset, NirGBDataset, RGNirDataset, NirGBLandDataset, NirGBAltDataset, NirGBLandAltDataset, RGBNirBioDataset, NirGBAltBioDataset, NirGB_BioCAL_Dataset
+from .ds import RGBDataset, RGBNirDataset, NirGBDataset, RGNirDataset, NirGBLandDataset, NirGBAltDataset, NirGBLandAltDataset, RGBNirBioDataset, NirGBAltBioDataset, NirGB_BioCAL_Dataset, RGBNir_BioCAL_Dataset, RGBNir_BioCAL_MultiLabel_Dataset
 from torch.utils.data import DataLoader
 import albumentations as A
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+import json
 
 class RGBDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size=32, path = "../data", num_workers=0, pin_memory=False, train_trans=None, test_trans=None):
+    def __init__(self, batch_size=32, path = "../data", num_workers=0, pin_memory=False, train_trans=None, test_trans=None, freq_subset=None):
         super().__init__()
         self.batch_size = batch_size
         self.path = Path(path)
@@ -20,14 +21,26 @@ class RGBDataModule(pl.LightningDataModule):
         self.pin_memory = pin_memory
         self.train_trans = train_trans
         self.test_trans = test_trans
+        self.freq_subset = freq_subset
         
     def read_data(self, mode="train"):
         obs_fr = pd.read_csv(self.path / "observations" / f"observations_fr_{mode}.csv", sep=";")
         obs_us = pd.read_csv(self.path / "observations" / f"observations_us_{mode}.csv", sep=";")
-        return pd.concat([obs_fr, obs_us])
+        obs = pd.concat([obs_fr, obs_us])
+        if mode == "train":
+            multi_labels = pd.read_csv("obs_multi_labels.csv", index_col="observation_id")
+            obs["multi_labels"] = list(map(lambda x: json.loads(x[0]), multi_labels.values))
+        if self.freq_subset is not None and mode == "train":
+            species_value_counts = obs["species_id"].value_counts()
+            split = 600
+            freq_subset_species_ids = species_value_counts[:split].index if self.freq_subset == "high" else species_value_counts[split:].index
+            obs = obs[obs["species_id"].isin(freq_subset_species_ids)]
+        
+        return obs
 
     def split_data(self):
-        self.data_train = self.data[self.data["subset"] == "train"]
+        #self.data_train = self.data[self.data["subset"] == "val"]
+        self.data_train = self.data
         self.data_val = self.data[self.data["subset"] == "val"]
 
     def generate_datasets(self):
@@ -284,8 +297,11 @@ class NirGB_BioCAL_DataModule(RGBDataModule):
         X_val = df_env.loc[self.data_val.observation_id.values]
         X_test = df_env.loc[self.data_test.observation_id.values]
         # inputer and normalizer
-        pipeline = Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
+        pipeline = Pipeline([("imputer", SimpleImputer(
+                                missing_values=np.nan,
+                                strategy="constant",
+                                fill_value=np.finfo(np.float32).min,
+                            )),
             ("std_scaler", StandardScaler()),
         ])
         self.X_train = pipeline.fit_transform(X_train.values)
@@ -319,3 +335,118 @@ class NirGB_BioCAL_DataModule(RGBDataModule):
                 getattr(A, trans)(**params) for trans, params in self.test_trans.items()
             ]) if self.test_trans is not None else None
             ) 
+
+    
+class RGBNir_BioCAL_DataModule(RGBDataModule):
+    def __init__(self, batch_size=32, path="../data", num_workers=0, pin_memory=False, train_trans=None, test_trans=None, freq_subset=None):
+        super().__init__(batch_size, path, num_workers, pin_memory, train_trans, test_trans, freq_subset)
+
+    def setup(self, stage=None):
+        self.data = self.read_data()
+        self.data_test = self.read_data("test")
+        self.split_data()
+        # read bioclimatic data
+        df_env = pd.read_csv(self.path / "pre-extracted" / "environmental_vectors.csv", sep=";", index_col="observation_id")
+        # get train, val, test bioclimatic data
+        X_train = df_env.loc[self.data_train.observation_id.values]
+        X_val = df_env.loc[self.data_val.observation_id.values]
+        X_test = df_env.loc[self.data_test.observation_id.values]
+        # inputer and normalizer
+        pipeline = Pipeline([("imputer", SimpleImputer(
+                                missing_values=np.nan,
+                                strategy="constant",
+                                fill_value=np.finfo(np.float32).min,
+                            )),
+            ("std_scaler", StandardScaler()),
+        ])
+        self.X_train = pipeline.fit_transform(X_train.values)
+        self.X_val = pipeline.transform(X_val.values)
+        self.X_test = pipeline.transform(X_test.values)
+        self.generate_datasets()
+        self.print_dataset_info()
+
+    def generate_datasets(self):
+        self.ds_train = RGBNir_BioCAL_Dataset(
+            self.data_train.observation_id.values,  # observation_ids
+            self.X_train,                           # bio
+            self.data_train.latitude.values, self.data_train.longitude.values,  # lat, lon
+            self.data_train.species_id.values,      # labels
+            trans=A.Compose([
+                getattr(A, trans)(**params) for trans, params in self.train_trans.items()
+                ]) 
+                if self.train_trans is not None else None
+            )
+        self.ds_val = RGBNir_BioCAL_Dataset(
+            self.data_val.observation_id.values,
+            self.X_val,
+            self.data_val.latitude.values, self.data_val.longitude.values, 
+            self.data_val.species_id.values
+            )
+        self.ds_test = RGBNir_BioCAL_Dataset(
+            self.data_test.observation_id.values, 
+            self.X_test,
+            self.data_test.latitude.values, self.data_test.longitude.values,
+            trans = A.Compose([
+                getattr(A, trans)(**params) for trans, params in self.test_trans.items()
+            ]) if self.test_trans is not None else None
+            )
+
+
+class RGBNir_BioCAL_MultiLabel_DataModule(RGBDataModule):
+    def __init__(self, batch_size=32, path="../data", num_workers=0, pin_memory=False, train_trans=None, test_trans=None, freq_subset=None):
+        super().__init__(batch_size, path, num_workers, pin_memory, train_trans, test_trans, freq_subset)
+
+    def setup(self, stage=None):
+        self.data = self.read_data()
+        self.data_test = self.read_data("test")
+        self.split_data()
+        # read bioclimatic data
+        df_env = pd.read_csv(self.path / "pre-extracted" / "environmental_vectors.csv", sep=";", index_col="observation_id")
+        # get train, val, test bioclimatic data
+        X_train = df_env.loc[self.data_train.observation_id.values]
+        X_val = df_env.loc[self.data_val.observation_id.values]
+        X_test = df_env.loc[self.data_test.observation_id.values]
+        # inputer and normalizer
+        pipeline = Pipeline([("imputer", SimpleImputer(
+                                missing_values=np.nan,
+                                strategy="constant",
+                                fill_value=np.finfo(np.float32).min,
+                            )),
+            ("std_scaler", StandardScaler()),
+        ])
+        self.X_train = pipeline.fit_transform(X_train.values)
+        self.X_val = pipeline.transform(X_val.values)
+        self.X_test = pipeline.transform(X_test.values)
+        self.generate_datasets()
+        self.print_dataset_info()
+
+    def generate_datasets(self):
+        self.ds_train = RGBNir_BioCAL_MultiLabel_Dataset(
+            self.data_train.observation_id.values,  # observation_ids
+            self.X_train,                           # bio
+            self.data_train.latitude.values, self.data_train.longitude.values,  # lat, lon
+            self.data_train.species_id.values,        # labels
+            self.data_train.multi_labels.values,     
+            trans=A.Compose([
+                getattr(A, trans)(**params) for trans, params in self.train_trans.items()
+                ]) 
+                if self.train_trans is not None else None
+            )
+        self.ds_val = RGBNir_BioCAL_MultiLabel_Dataset(
+            self.data_val.observation_id.values,
+            self.X_val,
+            self.data_val.latitude.values, self.data_val.longitude.values, 
+            self.data_val.species_id.values,
+            self.data_val.multi_labels.values,
+            )
+        self.ds_test = RGBNir_BioCAL_MultiLabel_Dataset(
+            self.data_test.observation_id.values, 
+            self.X_test,
+            self.data_test.latitude.values, self.data_test.longitude.values,
+            trans = A.Compose([
+                getattr(A, trans)(**params) for trans, params in self.test_trans.items()
+            ]) if self.test_trans is not None else None
+            )
+
+
+

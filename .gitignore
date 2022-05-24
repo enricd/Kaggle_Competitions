@@ -8,6 +8,10 @@ data
 .vscode
 lightning_logs
 *tar.gz
+*.zip
 *.ckpt
 GLC
 wandb/
+*.pt
+/checkpoints
+*.joblib

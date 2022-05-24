@@ -12,7 +12,7 @@ config = {
     "optimizer": "Adam",
     "num_bio": 67,
     "bio_layers": [256, 512, 1024],
-    "bio_dropout": 0.2,
+    "bio_dropout": 0.1,
     "optimizer_params": {
         "lr": 1e-3
     },
