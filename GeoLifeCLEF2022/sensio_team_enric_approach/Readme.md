@@ -1,3 +1,5 @@
+![solution_schema](./sensio_team_solution.png)
+
 I started with the approach from Juan Sensio in his yt channel: https://www.youtube.com/watch?v=iXvO9fCOAIg&t=4220s&ab_channel=sensio for learning purposes and trying to build on that something better if possible. Later I managed to get pretty good results with it and we merged in a Team for the competition. Finally we got into the first position of the Leaderboard.
 
 ## Lessons Learnt:
