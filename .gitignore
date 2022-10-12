@@ -14,4 +14,5 @@ GLC
 wandb/
 *.pt
 /checkpoints
-*.joblib
+UW-Madison_GI_Tract_Image_Segmentation
+open_problems_multimodal_single_cell
